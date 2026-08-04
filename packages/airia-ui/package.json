@@ -1,0 +1,26 @@
+{
+  "name": "@airia/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no lint target'"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.74"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@airia/types": "workspace:*",
+    "react-native-markdown-display": "^7.0.0",
+    "react-native-svg": "^15.0.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@airia/service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no lint target'",
+    "test:unit": "vitest run",
+    "test:integration": "echo 'no tests'"
+  },
+  "dependencies": {
+    "@airia/db": "workspace:*",
+    "@airia/types": "workspace:*",
+    "@mlc-ai/web-llm": "^0.2.84"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

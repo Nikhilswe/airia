@@ -1,0 +1,15 @@
+packages:
+  - 'packages/*'
+
+allowBuilds:
+  esbuild: true
+  llama.rn: true
+
+minimumReleaseAgeExclude:
+  - llama.rn@0.12.6
+
+onlyBuiltDependencies:
+  - esbuild
+
+patchedDependencies:
+  react-native@0.81.5: patches/react-native@0.81.5.patch

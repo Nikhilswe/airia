@@ -1,0 +1,23 @@
+{
+  "name": "@airia/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no lint target'",
+    "test:unit": "echo 'no tests'",
+    "test:integration": "vitest run --config vitest.config.ts tests/integration"
+  },
+  "dependencies": {
+    "@airia/types": "workspace:*",
+    "idb": "^8.0.0"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.0.0",
+    "vitest": "^1.6.0"
+  }
+}

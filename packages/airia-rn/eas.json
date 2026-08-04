@@ -1,0 +1,50 @@
+{
+  "cli": {
+    "version": ">= 12.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "node": "22.13.0",
+      "ios": {
+        "image": "macos-sequoia-15.5-xcode-16.4"
+      },
+      "pnpm": "11.2.2"
+    },
+    "simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "node": "22.13.0",
+      "ios": {
+        "simulator": true,
+        "image": "macos-sequoia-15.5-xcode-16.4"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "pnpm": "11.2.2"
+    },
+    "preview": {
+      "distribution": "internal",
+      "node": "22.13.0",
+      "ios": {
+        "image": "macos-sequoia-15.5-xcode-16.4"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "pnpm": "11.2.2"
+    },
+    "production": {
+      "node": "22.13.0",
+      "ios": {
+        "image": "macos-sequoia-15.5-xcode-16.4"
+      },
+      "pnpm": "11.2.2"
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

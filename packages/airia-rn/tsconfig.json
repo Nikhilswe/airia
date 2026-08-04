@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-native",
+    "strict": true,
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "paths": {
+      "@airia/types": ["../airia-types/src/index.ts"],
+      "@airia/db": ["./src/db/rnDb.ts"],
+      "@airia/service": ["../airia-service/src/index.ts"],
+      "@airia/ui": ["../airia-ui/src/index.ts"],
+      "@airia/ui/src/*": ["../airia-ui/src/*"]
+    }
+  },
+  "include": ["src", "metro.config.js"]
+}

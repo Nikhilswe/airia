@@ -1,0 +1,15 @@
+{
+  "name": "@airia/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no lint target'",
+    "test:unit": "echo 'no tests'",
+    "test:integration": "echo 'no tests'"
+  }
+}

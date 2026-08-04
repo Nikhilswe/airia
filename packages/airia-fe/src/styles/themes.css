@@ -1,0 +1,112 @@
+/* AIrIA — Theme tokens */
+/* Applied via data-theme attribute on <html> */
+/* Each theme defines accent + orb + surface variables for dark UI */
+
+:root,
+[data-theme='dawn'] {
+  --accent:          #F5A623;
+  --accent-dark:     #C47D0E;
+  --accent-light:    rgba(245, 166, 35, 0.12);
+  --accent-border:   rgba(245, 166, 35, 0.45);
+  --accent-text:     #FFDEA0;
+  --orb-bg:          rgba(200, 120, 10, 0.25);
+  --orb-glow:        rgba(245, 166, 35, 0.4);
+  --surface:         rgba(28, 22, 10, 0.75);
+  --surface-raised:  rgba(38, 30, 12, 0.85);
+  --surface-border:  rgba(245, 166, 35, 0.15);
+  --bg:              #0D0B07;
+  --text-primary:    #F2EDE2;
+  --text-secondary:  #A89878;
+  --text-tertiary:   #5C5040;
+}
+
+[data-theme='midnight'] {
+  --accent:          #8B7FFF;
+  --accent-dark:     #5E52D6;
+  --accent-light:    rgba(139, 127, 255, 0.12);
+  --accent-border:   rgba(139, 127, 255, 0.45);
+  --accent-text:     #C8C2FF;
+  --orb-bg:          rgba(60, 50, 160, 0.25);
+  --orb-glow:        rgba(139, 127, 255, 0.4);
+  --surface:         rgba(12, 10, 28, 0.75);
+  --surface-raised:  rgba(18, 14, 40, 0.88);
+  --surface-border:  rgba(139, 127, 255, 0.15);
+  --bg:              #070611;
+  --text-primary:    #EAE8FF;
+  --text-secondary:  #8880B8;
+  --text-tertiary:   #4A4470;
+}
+
+[data-theme='forest'] {
+  --accent:          #5DD45B;
+  --accent-dark:     #369934;
+  --accent-light:    rgba(93, 212, 91, 0.12);
+  --accent-border:   rgba(93, 212, 91, 0.40);
+  --accent-text:     #ACEEAB;
+  --orb-bg:          rgba(30, 90, 28, 0.28);
+  --orb-glow:        rgba(93, 212, 91, 0.35);
+  --surface:         rgba(8, 20, 8, 0.75);
+  --surface-raised:  rgba(12, 28, 12, 0.88);
+  --surface-border:  rgba(93, 212, 91, 0.14);
+  --bg:              #050D05;
+  --text-primary:    #E4F5E3;
+  --text-secondary:  #74A873;
+  --text-tertiary:   #3A5E39;
+}
+
+[data-theme='ocean'] {
+  --accent:          #38B6FF;
+  --accent-dark:     #1484CC;
+  --accent-light:    rgba(56, 182, 255, 0.12);
+  --accent-border:   rgba(56, 182, 255, 0.40);
+  --accent-text:     #A8DCFF;
+  --orb-bg:          rgba(10, 60, 110, 0.28);
+  --orb-glow:        rgba(56, 182, 255, 0.35);
+  --surface:         rgba(6, 14, 28, 0.75);
+  --surface-raised:  rgba(8, 20, 40, 0.88);
+  --surface-border:  rgba(56, 182, 255, 0.14);
+  --bg:              #030810;
+  --text-primary:    #E0F1FF;
+  --text-secondary:  #6898C0;
+  --text-tertiary:   #2D4F70;
+}
+
+[data-theme='rose'] {
+  --accent:          #FF6EA3;
+  --accent-dark:     #CC3B72;
+  --accent-light:    rgba(255, 110, 163, 0.12);
+  --accent-border:   rgba(255, 110, 163, 0.40);
+  --accent-text:     #FFB8D4;
+  --orb-bg:          rgba(120, 20, 60, 0.25);
+  --orb-glow:        rgba(255, 110, 163, 0.38);
+  --surface:         rgba(24, 8, 16, 0.75);
+  --surface-raised:  rgba(34, 10, 22, 0.88);
+  --surface-border:  rgba(255, 110, 163, 0.14);
+  --bg:              #0D0408;
+  --text-primary:    #FFE8F1;
+  --text-secondary:  #B06888;
+  --text-tertiary:   #603048;
+}
+
+[data-theme='slate'] {
+  --accent:          #9EAABF;
+  --accent-dark:     #6B7A8F;
+  --accent-light:    rgba(158, 170, 191, 0.12);
+  --accent-border:   rgba(158, 170, 191, 0.38);
+  --accent-text:     #CBD4E2;
+  --orb-bg:          rgba(40, 50, 65, 0.30);
+  --orb-glow:        rgba(158, 170, 191, 0.30);
+  --surface:         rgba(12, 14, 18, 0.75);
+  --surface-raised:  rgba(18, 22, 28, 0.88);
+  --surface-border:  rgba(158, 170, 191, 0.12);
+  --bg:              #080A0D;
+  --text-primary:    #DDE4EE;
+  --text-secondary:  #7888A0;
+  --text-tertiary:   #3C4A5C;
+}
+
+/* Orb pulse animation — activates at trust level 2+ */
+@keyframes orb-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px var(--orb-glow), 0 0 24px var(--orb-glow); }
+  50%       { box-shadow: 0 0 0 12px var(--orb-glow), 0 0 48px var(--orb-glow); }
+}

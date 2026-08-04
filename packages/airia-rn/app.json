@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "AIrIA",
+    "slug": "airia",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D0B07"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nikhil.airia",
+      "deploymentTarget": "16.4"
+    },
+    "android": {
+      "package": "com.nikhil.airia",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0D0B07"
+      }
+    },
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "3aae67af-d8f3-4aaf-83b0-afdbb75d90e7"
+      }
+    },
+    "owner": "nikhp"
+  }
+}
