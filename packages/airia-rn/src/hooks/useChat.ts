@@ -188,6 +188,10 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
       inFlightRef.current = true
       setError(null)
 
+      // Everything below runs inside try/finally: any throw used to leave the
+      // guard latched on, after which every later send silently cleared the
+      // composer and did nothing until the app restarted.
+      try {
       let client: IOllamaClient
       let modelUsed: string
       let routeInfo: RouteInfo | undefined
@@ -199,7 +203,6 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
       } catch (e) {
         if (e instanceof RegulatedDomainError) {
           setError(e.message)
-          inFlightRef.current = false
           return
         }
         throw e
@@ -266,7 +269,6 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
           if (!fullResponse) {
             setIsStreaming(false)
             setStreamingContent('')
-            inFlightRef.current = false
             return
           }
         } else {
@@ -274,7 +276,6 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
           setError(`Couldn't reach AIrIA — ${(err as Error).message}`)
           setIsStreaming(false)
           setStreamingContent('')
-          inFlightRef.current = false
           return
         }
       }
@@ -305,13 +306,22 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
 
       setIsStreaming(false)
       setStreamingContent('')
-      inFlightRef.current = false
 
       if (tier !== 'free') {
         memoryExtractor
           .extract(content, fullResponse, conversationId)
           .then(entries => Promise.all(entries.map(e => memoryStore.upsert(e))))
           .catch(console.error)
+      }
+      } catch (err) {
+        // Surface it rather than failing silently — a cleared composer with no
+        // reply reads as the app ignoring you.
+        console.error('sendMessage failed:', err)
+        setError(`Something went wrong — ${(err as Error).message}`)
+        setIsStreaming(false)
+        setStreamingContent('')
+      } finally {
+        inFlightRef.current = false
       }
     },
     [conversationId, messages, conversations, contextManager, memoryRetriever, memoryStore, tier]
