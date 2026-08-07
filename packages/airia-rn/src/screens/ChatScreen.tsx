@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Image,
+  Keyboard,
   Platform,
   StyleSheet,
   Animated,
@@ -135,6 +136,14 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
       }
     }
     init().catch(console.error)
+  }, [])
+
+  // Keep the latest turn in view once the keyboard has finished opening.
+  useEffect(() => {
+    const onShow = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50)
+    })
+    return () => onShow.remove()
   }, [])
 
   useEffect(() => {
@@ -407,8 +416,10 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
       {modelDownloadState !== 'prompt' && modelDownloadState !== 'downloading' && (
         <KeyboardAvoidingView
           style={styles.flex}
+          // Android lifts the window itself via softwareKeyboardLayoutMode:
+          // "pan" — under edge-to-edge the keyboard is folded into the safe-area
+          // bottom inset, so doing the arithmetic here as well cancels the lift.
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={insets.top + 50}
         >
           <FlatList
             ref={listRef}
