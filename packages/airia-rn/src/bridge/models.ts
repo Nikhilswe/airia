@@ -23,6 +23,19 @@ export interface ModelEntry {
    */
   mmprojUrl?: string
   mmprojSizeBytes?: number
+  /**
+   * Whether this model's chat template can drive llama.cpp's structured-output
+   * parser (tool calls, reasoning traces).
+   *
+   * When false we pass `force_pure_content`, because llama.cpp otherwise tries
+   * to derive a parser from the template and multi-turn conversations fail with
+   * "Unable to generate parser for this template". Gemma 3 has no tool-call
+   * template at all, so nothing is lost by treating its output as prose.
+   *
+   * Set this to true per model as tool calling lands — it is the seam that
+   * keeps the fix from silently disabling tools everywhere.
+   */
+  supportsToolCalls?: boolean
 }
 
 // Order matters: TierRouter will pick the first one that fits the device.

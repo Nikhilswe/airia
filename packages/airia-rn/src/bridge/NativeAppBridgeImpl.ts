@@ -235,6 +235,10 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
     const result = await ctx.completion(
       {
         messages: outbound,
+        // Only skip structured parsing for models whose template cannot drive
+        // it. Blanket-forcing this would silently disable tool calling for
+        // every model once tools land, so the decision lives in the registry.
+        force_pure_content: !getModel(modelId)?.supportsToolCalls,
         // llama.rn opens media by filesystem path, not URL — a file:// prefix
         // makes it report the file as missing.
         ...(mediaPaths?.length ? { media_paths: mediaPaths } : {}),
