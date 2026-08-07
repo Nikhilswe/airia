@@ -47,7 +47,7 @@ export const MODEL_REGISTRY: ModelEntry[] = [
     description: 'Google\'s latest lightweight model. Strong at reasoning, summarization, and multilingual tasks. Best balance of speed and quality for mobile.',
     sizeBytes: 806_058_272,
     url: 'https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf',
-    nCtx: 4096,
+    nCtx: 8192,
     nThreads: 4,
     minRamGB: 2,
     capability: 'reason',
@@ -59,7 +59,7 @@ export const MODEL_REGISTRY: ModelEntry[] = [
     description: 'Alibaba\'s code-specialized model. Excels at code generation, debugging, and refactoring. Optimized for on-device coding assistance.',
     sizeBytes: 1_117_320_768,
     url: 'https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf',
-    nCtx: 4096,
+    nCtx: 8192,
     nThreads: 4,
     minRamGB: 3,
     capability: 'code',
@@ -74,7 +74,7 @@ export const MODEL_REGISTRY: ModelEntry[] = [
     url: 'https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf',
     mmprojUrl: 'https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf',
     mmprojSizeBytes: 844_757_728,
-    nCtx: 4096,
+    nCtx: 8192,
     nThreads: 4,
     minRamGB: 4,
     capability: 'vision',
@@ -86,7 +86,7 @@ export const MODEL_REGISTRY: ModelEntry[] = [
     description: 'Meta\'s compact instruction-tuned model. Excels at conversational tasks, coding assistance, and structured output. Fastest inference on-device.',
     sizeBytes: 770_000_000,
     url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
-    nCtx: 4096,
+    nCtx: 8192,
     nThreads: 4,
     minRamGB: 2,
     capability: 'reason',
@@ -94,6 +94,18 @@ export const MODEL_REGISTRY: ModelEntry[] = [
 ]
 
 export const DEFAULT_MODEL_ID = MODEL_REGISTRY[0].id
+
+/**
+ * Hard cap on generated tokens per reply.
+ *
+ * The context budget reserves room for this, so the two must stay in step —
+ * reserving more than we can generate silently costs conversation history,
+ * reserving less risks the model being cut off mid-sentence.
+ */
+export const MAX_RESPONSE_TOKENS = 5120
+
+/** Headroom over MAX_RESPONSE_TOKENS for template and role overhead. */
+export const RESPONSE_RESERVE_TOKENS = MAX_RESPONSE_TOKENS + 256
 
 export function getModel(id: string): ModelEntry | undefined {
   return MODEL_REGISTRY.find(m => m.id === id)

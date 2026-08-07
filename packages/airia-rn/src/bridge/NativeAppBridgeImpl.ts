@@ -9,7 +9,7 @@ import * as Device from 'expo-device'
 import { Platform } from 'react-native'
 import type { NativeAppBridgeInterface, NativeDeviceInfo } from '@airia/service'
 import type { OllamaMessage } from '@airia/types'
-import { getModel, modelPath, mmprojPath, isModelOnDisk, DEFAULT_MODEL_ID } from './models'
+import { getModel, modelPath, mmprojPath, isModelOnDisk, DEFAULT_MODEL_ID, MAX_RESPONSE_TOKENS } from './models'
 
 export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
   private contexts = new Map<string, LlamaContext>()
@@ -242,7 +242,7 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
         // llama.rn opens media by filesystem path, not URL — a file:// prefix
         // makes it report the file as missing.
         ...(mediaPaths?.length ? { media_paths: mediaPaths } : {}),
-        n_predict: 1024,
+        n_predict: MAX_RESPONSE_TOKENS,
         temperature: options.temperature ?? 0.7,
         // Cover turn-end markers across model families in the registry.
         // Turn-end markers across the registry: Gemma, Llama, Phi, and the

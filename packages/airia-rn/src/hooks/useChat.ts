@@ -18,7 +18,7 @@ import {
   capabilityRouter,
   RegulatedDomainError,
 } from '@airia/service'
-import { getModelForCapability, isModelOnDisk, getModel, DEFAULT_MODEL_ID } from '../bridge/models'
+import { getModelForCapability, isModelOnDisk, getModel, DEFAULT_MODEL_ID, RESPONSE_RESERVE_TOKENS } from '../bridge/models'
 import { buildAttachmentContext } from '../services/attachmentText'
 import type { OllamaClient as IOllamaClient } from '@airia/types'
 import {
@@ -166,7 +166,16 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
   const abortRef = useRef<AbortController | null>(null)
   const inFlightRef = useRef(false)
 
-  const contextManager = useRef(new ContextManager()).current
+  // The budget has to track the window the model is actually loaded with, and
+  // leave room for the reply. Left at defaults these drift apart, and a prompt
+  // larger than the window makes llama.cpp silently drop the oldest turns —
+  // the conversation quietly losing its own history.
+  const contextManager = useRef(
+    new ContextManager({
+      maxTokens: getModel(DEFAULT_MODEL_ID)?.nCtx ?? 4096,
+      reserveForResponse: RESPONSE_RESERVE_TOKENS,
+    })
+  ).current
   const memoryStore = useRef(new MemoryStore()).current
   const memoryRetriever = useRef(new MemoryRetrieverImpl(memoryStore)).current
 
