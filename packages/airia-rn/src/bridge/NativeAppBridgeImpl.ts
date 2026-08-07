@@ -9,7 +9,7 @@ import * as Device from 'expo-device'
 import { Platform } from 'react-native'
 import type { NativeAppBridgeInterface, NativeDeviceInfo } from '@airia/service'
 import type { OllamaMessage } from '@airia/types'
-import { getModel, modelPath, mmprojPath, isModelOnDisk, DEFAULT_MODEL_ID, MAX_RESPONSE_TOKENS } from './models'
+import { getModel, modelPath, mmprojPath, isModelOnDisk, isFileComplete, discardPartialFile, DEFAULT_MODEL_ID, MAX_RESPONSE_TOKENS } from './models'
 
 export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
   private contexts = new Map<string, LlamaContext>()
@@ -60,14 +60,15 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
 
     const dest = modelPath(modelId)
 
-    // Resume partial downloads if the file already exists
-    const existing = await FileSystem.getInfoAsync(dest)
-    if (existing.exists && (existing as { size?: number }).size &&
-        (existing as { size: number }).size > 100_000) {
+    if (await isFileComplete(dest, entry.sizeBytes)) {
       onProgress(1, 'Model already downloaded')
       await this.initModel(modelId, onProgress)
       return
     }
+
+    // Anything left here is a half-written file from an attempt that was cut
+    // short. Clear it, or the next attempt resumes into a corrupt GGUF.
+    await discardPartialFile(dest)
 
     onProgress(0, 'Starting download…')
 
@@ -109,11 +110,8 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
     onProgress: (progress: number, text: string) => void
   ): Promise<void> {
     const dest = mmprojPath(modelId)
-    const existing = await FileSystem.getInfoAsync(dest)
-    if (existing.exists && (existing as { size?: number }).size &&
-        (existing as { size: number }).size > 100_000) {
-      return
-    }
+    if (await isFileComplete(dest, sizeBytes)) return
+    await discardPartialFile(dest)
 
     const dl = FileSystem.createDownloadResumable(
       url,

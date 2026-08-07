@@ -99,14 +99,23 @@ async function buildClient(
     // but we record why, so the UI can offer the download instead of quietly
     // answering an image question with a text-only model.
     let visionReady = false
+    let loadFailed = false
     if (decision) {
       const capModel = getModelForCapability(decision.capability)
       const onDisk = capModel ? await isModelOnDisk(capModel.id) : false
 
       if (capModel && onDisk) {
-        await bridge.initModel(capModel.id)
-        modelUsed = capModel.displayName
-        visionReady = decision.capability === 'vision'
+        try {
+          await bridge.initModel(capModel.id)
+          modelUsed = capModel.displayName
+          visionReady = decision.capability === 'vision'
+        } catch (err) {
+          // A capability model that won't load must not take the turn down with
+          // it — degrade to whatever is already loaded, exactly as we do when
+          // the model isn't downloaded at all.
+          console.warn(`Falling back, ${capModel.id} failed to load:`, err)
+          loadFailed = true
+        }
       }
 
       routeInfo = {
@@ -114,7 +123,7 @@ async function buildClient(
         requestedModel: capModel?.displayName ?? decision.modelName,
         requestedModelId: capModel?.id,
         actualModel: modelUsed,
-        fallback: !capModel ? 'no-model' : onDisk ? 'none' : 'not-downloaded',
+        fallback: !capModel ? 'no-model' : loadFailed || !onDisk ? 'not-downloaded' : 'none',
         method: decision.method,
         score: decision.score,
       }

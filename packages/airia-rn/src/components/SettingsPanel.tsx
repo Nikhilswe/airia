@@ -61,6 +61,7 @@ export function SettingsPanel({
   const [summary, setSummary] = useState<MetricsSummary | null>(null)
   const [modelStates, setModelStates] = useState<Record<string, 'unknown' | 'available' | 'downloading' | 'ready'>>({})
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({})
+  const [downloadError, setDownloadError] = useState<Record<string, string>>({})
   const [activeModelId, setActiveModelId] = useState<string | null>(null)
   const [expandedModelId, setExpandedModelId] = useState<string | null>(null)
 
@@ -88,12 +89,17 @@ export function SettingsPanel({
   const handleModelDownload = useCallback(async (model: ModelEntry) => {
     setModelStates(prev => ({ ...prev, [model.id]: 'downloading' }))
     setDownloadProgress(prev => ({ ...prev, [model.id]: 0 }))
+    setDownloadError(prev => ({ ...prev, [model.id]: '' }))
     try {
       await getNativeAppBridge().downloadModel(model.id, (progress) => {
         setDownloadProgress(prev => ({ ...prev, [model.id]: progress }))
       })
       setModelStates(prev => ({ ...prev, [model.id]: 'ready' }))
-    } catch {
+    } catch (err) {
+      // Swallowing this left the button reverting to "Download" with no
+      // explanation, which reads as the button simply not working.
+      console.error(`Download failed for ${model.id}:`, err)
+      setDownloadError(prev => ({ ...prev, [model.id]: (err as Error).message }))
       setModelStates(prev => ({ ...prev, [model.id]: 'available' }))
     }
   }, [])
@@ -307,6 +313,11 @@ export function SettingsPanel({
                     {model.minRamGB}GB+
                   </Text>
                 </View>
+                {downloadError[model.id] ? (
+                  <Text style={[styles.modelError, { color: theme.shock }]}>
+                    Download failed — {downloadError[model.id]}
+                  </Text>
+                ) : null}
               </View>
               <View style={styles.modelAction}>
                 {state === 'downloading' ? (
@@ -454,6 +465,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   modelInfo: { flex: 1 },
+  modelError: { fontSize: 10, lineHeight: 14, marginTop: 6 },
   modelNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   modelTags: { flexDirection: 'row', gap: 4, marginTop: 4 },
   modelTag: {

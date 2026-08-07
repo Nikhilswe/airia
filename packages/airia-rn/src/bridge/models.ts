@@ -123,8 +123,30 @@ export function getModelForCapability(capability: Capability): ModelEntry | unde
   return MODEL_REGISTRY.find(m => m.capability === capability)
 }
 
+/**
+ * Whether a downloaded file is actually complete.
+ *
+ * Judged against the expected byte size, not a token floor. A download
+ * interrupted by the app closing leaves a partial file that easily clears a few
+ * hundred KB — treating that as finished both skips the retry and hands a
+ * truncated GGUF to llama.cpp. 2% tolerance covers mirror-to-mirror variation.
+ */
+export async function isFileComplete(path: string, expectedBytes?: number): Promise<boolean> {
+  const info = await FileSystem.getInfoAsync(path)
+  if (!info.exists) return false
+
+  const size = (info as { size?: number }).size
+  if (size === undefined) return false
+
+  return expectedBytes ? size >= expectedBytes * 0.98 : size > 100_000
+}
+
+/** Clears a half-written file so the next attempt starts clean. */
+export async function discardPartialFile(path: string): Promise<void> {
+  const info = await FileSystem.getInfoAsync(path)
+  if (info.exists) await FileSystem.deleteAsync(path, { idempotent: true })
+}
+
 export async function isModelOnDisk(id: string): Promise<boolean> {
-  const info = await FileSystem.getInfoAsync(modelPath(id))
-  return info.exists && (info as { size?: number }).size !== undefined
-    && (info as { size: number }).size > 100_000
+  return isFileComplete(modelPath(id), getModel(id)?.sizeBytes)
 }
