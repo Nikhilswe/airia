@@ -169,6 +169,31 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
     await sendMessage(content, hints.length > 0 ? hints : undefined)
   }, [inputText, isStreaming, sendMessage, attachments])
 
+  // Shared by the library and camera paths: the vision model decodes with
+  // stb_image, which has no HEIC support and chokes on very large images, so
+  // every picture is normalised to a bounded JPEG before it can be attached.
+  const attachImageAsset = useCallback(async (asset: ImagePicker.ImagePickerAsset, fallbackName: string) => {
+    let uri = asset.uri
+    try {
+      const jpeg = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
+      )
+      uri = jpeg.uri
+    } catch (err) {
+      console.warn('Image conversion failed, using original:', err)
+    }
+
+    setAttachments(prev => [...prev, {
+      type: 'image' as const,
+      mimeType: 'image/jpeg',
+      filename: asset.fileName ?? fallbackName,
+      uri,
+      sizeBytes: asset.fileSize,
+    }])
+  }, [])
+
   const handlePickImage = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -176,30 +201,30 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
       quality: 0.8,
     })
     if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0]
-      // The vision model decodes with stb_image, which has no HEIC support and
-      // chokes on very large images — normalise to a bounded JPEG up front.
-      let uri = asset.uri
-      try {
-        const jpeg = await ImageManipulator.manipulateAsync(
-          asset.uri,
-          [{ resize: { width: 1024 } }],
-          { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
-        )
-        uri = jpeg.uri
-      } catch (err) {
-        console.warn('Image conversion failed, using original:', err)
-      }
-
-      setAttachments(prev => [...prev, {
-        type: 'image' as const,
-        mimeType: 'image/jpeg',
-        filename: asset.fileName ?? 'image.jpg',
-        uri,
-        sizeBytes: asset.fileSize,
-      }])
+      await attachImageAsset(result.assets[0], 'image.jpg')
     }
-  }, [])
+  }, [attachImageAsset])
+
+  const handleTakePhoto = useCallback(async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
+    if (!permission.granted) {
+      Alert.alert(
+        'Camera access needed',
+        permission.canAskAgain
+          ? 'AIrIA needs the camera to take a photo to ask about.'
+          : 'Camera access is off. Enable it for AIrIA in Settings to take photos.'
+      )
+      return
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    })
+    if (!result.canceled && result.assets.length > 0) {
+      await attachImageAsset(result.assets[0], 'photo.jpg')
+    }
+  }, [attachImageAsset])
 
   const handlePickDocument = useCallback(async () => {
     const result = await DocumentPicker.getDocumentAsync({
@@ -221,11 +246,12 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
   // resulting hints to decide which model handles the turn.
   const handleAttach = useCallback(() => {
     Alert.alert('Add attachment', undefined, [
-      { text: 'Photo', onPress: () => { handlePickImage().catch(console.error) } },
+      { text: 'Take photo', onPress: () => { handleTakePhoto().catch(console.error) } },
+      { text: 'Photo library', onPress: () => { handlePickImage().catch(console.error) } },
       { text: 'Document', onPress: () => { handlePickDocument().catch(console.error) } },
       { text: 'Cancel', style: 'cancel' },
     ])
-  }, [handlePickImage, handlePickDocument])
+  }, [handleTakePhoto, handlePickImage, handlePickDocument])
 
   const handleFeedback = useCallback(
     async (messageId: string, signal: FeedbackSignalType) => {
