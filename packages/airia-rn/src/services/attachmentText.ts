@@ -40,21 +40,19 @@ function truncate(text: string): { text: string; truncated: boolean } {
   return { text: clean.slice(0, MAX_CHARS_PER_DOC), truncated: true }
 }
 
-async function extractPdf(uri: string): Promise<string> {
-  // unpdf ships a pdfjs build with no native dependency, but it expects a
-  // fairly complete JS runtime — hence the caller's try/catch.
-  const { extractText, getDocumentProxy } = await import('unpdf')
-  const base64 = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  })
-  const binary = globalThis.atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-
-  const pdf = await getDocumentProxy(bytes)
-  const { text } = await extractText(pdf, { mergePages: true })
-  return Array.isArray(text) ? text.join('\n\n') : text
-}
+/**
+ * PDF text extraction is not available on-device yet.
+ *
+ * The pure-JS route (unpdf/pdf.js) is not viable under Hermes: it ships
+ * `import.meta`, which fails the release bundle outright, and its renderer
+ * additionally expects DOMMatrix and canvas. Forcing it through Babel would
+ * only move the failure from build time to run time.
+ *
+ * Reaching a PDF therefore needs either a native extractor or rendering pages
+ * to images for the vision model. Until then we say so rather than guess.
+ */
+const PDF_UNSUPPORTED_REASON =
+  'not readable on-device yet (PDF text extraction is not supported)'
 
 export async function extractAttachment(a: AttachmentHint): Promise<ExtractedAttachment> {
   const filename = a.filename ?? 'attachment'
@@ -68,12 +66,7 @@ export async function extractAttachment(a: AttachmentHint): Promise<ExtractedAtt
     }
 
     if (isPdf(a)) {
-      const raw = await extractPdf(a.uri)
-      if (!raw.trim()) {
-        return { filename, text: null, reason: 'no selectable text (likely a scan)', truncated: false }
-      }
-      const { text, truncated } = truncate(raw)
-      return { filename, text, truncated }
+      return { filename, text: null, reason: PDF_UNSUPPORTED_REASON, truncated: false }
     }
 
     return { filename, text: null, reason: 'unsupported file type', truncated: false }

@@ -132,9 +132,13 @@ dependencies, so web and mobile share it directly.
   hardware — the iOS Simulator's Metal shim aborts the process on CLIP tensor
   upload, as a native trap JavaScript cannot catch. The device path has not been
   exercised.
-- **PDF extraction is unproven.** `unpdf` targets serverless JS runtimes, not
-  Hermes. It is guarded so failure degrades to an explicit "could not be read"
-  note, but it may not work at all.
+- **PDF text extraction is not implemented.** The pure-JS route (`unpdf`/pdf.js)
+  is not viable under Hermes — it ships `import.meta`, which fails the release
+  bundle outright, and its renderer additionally needs `DOMMatrix` and canvas.
+  PDFs currently report that their contents could not be read, so the model
+  declines rather than guessing. Getting them working needs either a native
+  extractor or rendering pages to images for the vision model; the latter would
+  also cover scanned PDFs, which text extraction never could.
 
 ## Docs
 

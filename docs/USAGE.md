@@ -26,8 +26,14 @@ Tap **⊕** to the left of the input:
 
 - **Photo** — pick from your library. Images are converted to JPEG and scaled to
   1024px before inference.
-- **Document** — pick any file. PDFs, slide decks, and spreadsheets are treated as
-  visual documents; source files are treated as code.
+- **Document** — pick any file. Text, Markdown, CSV, JSON, YAML, and source-code
+  files have their contents read into the prompt.
+
+**PDFs are not readable yet.** They still route correctly, but their text cannot
+be extracted on-device, so the reply will say the contents could not be read
+rather than guess at them. Slide decks and spreadsheets are in the same position.
+For anything in a PDF today, screenshot the page and attach it as a photo — the
+vision model reads it directly.
 
 Attachments appear as a chip above the input, with a thumbnail for images. Tap
 **✕** on a chip to remove it. Once sent, the attachment stays visible in the
@@ -101,7 +107,7 @@ capability, not choosing a default.
 | If you want to… | Download |
 |---|---|
 | Just chat | Gemma 3 1B — the default, enough on its own |
-| Ask about screenshots, photos, PDFs | Qwen 2.5 VL 3B (+845 MB projector) |
+| Ask about screenshots and photos | Qwen 2.5 VL 3B (+845 MB projector) |
 | Get help with code | Qwen 2.5 Coder 1.5B |
 
 Vision is the largest download because a vision model needs both weights and a
@@ -116,9 +122,11 @@ the note.
 **An image reply is wrong or invented.** Check the tags. If the model shown isn't
 the vision model, it never saw the image. Download the vision model.
 
-**A document reply says the contents couldn't be read.** Scanned PDFs have no
-selectable text. Text and source files should work; some formats aren't supported
-yet.
+**A document reply says the contents couldn't be read.** Expected for PDFs, slide
+decks, and spreadsheets — on-device text extraction for those isn't implemented,
+and the app says so rather than inventing contents. Screenshot the page and
+attach it as a photo instead. Text, Markdown, CSV, JSON, YAML, and source files
+should all read correctly.
 
 **Everything is slow.** Expected for larger models on-device, and worst on the
 first reply after a model loads. Smaller models are much faster; the router will
