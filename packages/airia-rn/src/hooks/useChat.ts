@@ -18,7 +18,7 @@ import {
   capabilityRouter,
   RegulatedDomainError,
 } from '@airia/service'
-import { getModelForCapability, isModelOnDisk, getModel, DEFAULT_MODEL_ID } from '../bridge/models'
+import { getModelForCapability, isModelOnDisk, getModel, DEFAULT_MODEL_ID, RESPONSE_RESERVE_TOKENS } from '../bridge/models'
 import { buildAttachmentContext } from '../services/attachmentText'
 import type { OllamaClient as IOllamaClient } from '@airia/types'
 import {
@@ -99,14 +99,23 @@ async function buildClient(
     // but we record why, so the UI can offer the download instead of quietly
     // answering an image question with a text-only model.
     let visionReady = false
+    let loadFailed = false
     if (decision) {
       const capModel = getModelForCapability(decision.capability)
       const onDisk = capModel ? await isModelOnDisk(capModel.id) : false
 
       if (capModel && onDisk) {
-        await bridge.initModel(capModel.id)
-        modelUsed = capModel.displayName
-        visionReady = decision.capability === 'vision'
+        try {
+          await bridge.initModel(capModel.id)
+          modelUsed = capModel.displayName
+          visionReady = decision.capability === 'vision'
+        } catch (err) {
+          // A capability model that won't load must not take the turn down with
+          // it — degrade to whatever is already loaded, exactly as we do when
+          // the model isn't downloaded at all.
+          console.warn(`Falling back, ${capModel.id} failed to load:`, err)
+          loadFailed = true
+        }
       }
 
       routeInfo = {
@@ -114,7 +123,7 @@ async function buildClient(
         requestedModel: capModel?.displayName ?? decision.modelName,
         requestedModelId: capModel?.id,
         actualModel: modelUsed,
-        fallback: !capModel ? 'no-model' : onDisk ? 'none' : 'not-downloaded',
+        fallback: !capModel ? 'no-model' : loadFailed || !onDisk ? 'not-downloaded' : 'none',
         method: decision.method,
         score: decision.score,
       }
@@ -166,7 +175,16 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
   const abortRef = useRef<AbortController | null>(null)
   const inFlightRef = useRef(false)
 
-  const contextManager = useRef(new ContextManager()).current
+  // The budget has to track the window the model is actually loaded with, and
+  // leave room for the reply. Left at defaults these drift apart, and a prompt
+  // larger than the window makes llama.cpp silently drop the oldest turns —
+  // the conversation quietly losing its own history.
+  const contextManager = useRef(
+    new ContextManager({
+      maxTokens: getModel(DEFAULT_MODEL_ID)?.nCtx ?? 4096,
+      reserveForResponse: RESPONSE_RESERVE_TOKENS,
+    })
+  ).current
   const memoryStore = useRef(new MemoryStore()).current
   const memoryRetriever = useRef(new MemoryRetrieverImpl(memoryStore)).current
 
@@ -188,6 +206,10 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
       inFlightRef.current = true
       setError(null)
 
+      // Everything below runs inside try/finally: any throw used to leave the
+      // guard latched on, after which every later send silently cleared the
+      // composer and did nothing until the app restarted.
+      try {
       let client: IOllamaClient
       let modelUsed: string
       let routeInfo: RouteInfo | undefined
@@ -199,7 +221,6 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
       } catch (e) {
         if (e instanceof RegulatedDomainError) {
           setError(e.message)
-          inFlightRef.current = false
           return
         }
         throw e
@@ -266,7 +287,6 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
           if (!fullResponse) {
             setIsStreaming(false)
             setStreamingContent('')
-            inFlightRef.current = false
             return
           }
         } else {
@@ -274,7 +294,6 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
           setError(`Couldn't reach AIrIA — ${(err as Error).message}`)
           setIsStreaming(false)
           setStreamingContent('')
-          inFlightRef.current = false
           return
         }
       }
@@ -305,13 +324,22 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
 
       setIsStreaming(false)
       setStreamingContent('')
-      inFlightRef.current = false
 
       if (tier !== 'free') {
         memoryExtractor
           .extract(content, fullResponse, conversationId)
           .then(entries => Promise.all(entries.map(e => memoryStore.upsert(e))))
           .catch(console.error)
+      }
+      } catch (err) {
+        // Surface it rather than failing silently — a cleared composer with no
+        // reply reads as the app ignoring you.
+        console.error('sendMessage failed:', err)
+        setError(`Something went wrong — ${(err as Error).message}`)
+        setIsStreaming(false)
+        setStreamingContent('')
+      } finally {
+        inFlightRef.current = false
       }
     },
     [conversationId, messages, conversations, contextManager, memoryRetriever, memoryStore, tier]
