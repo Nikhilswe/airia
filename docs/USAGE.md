@@ -24,16 +24,19 @@ its first reply after loading.
 
 Tap **⊕** to the left of the input:
 
-- **Photo** — pick from your library. Images are converted to JPEG and scaled to
-  1024px before inference.
-- **Document** — pick any file. Text, Markdown, CSV, JSON, YAML, and source-code
-  files have their contents read into the prompt.
+- **Take photo** — photograph something and ask about it. The camera permission
+  is requested the first time.
+- **Photo library** — pick an existing image.
+- **Document** — pick any file. Text, Markdown, CSV, JSON, YAML, source code and
+  **PDFs** have their contents read into the prompt.
 
-**PDFs are not readable yet.** They still route correctly, but their text cannot
-be extracted on-device, so the reply will say the contents could not be read
-rather than guess at them. Slide decks and spreadsheets are in the same position.
-For anything in a PDF today, screenshot the page and attach it as a photo — the
-vision model reads it directly.
+Photos from either source are converted to JPEG and scaled to 1024px before
+inference.
+
+A PDF that cannot be read says why — password protected, or a scan with no text
+layer. Scans have no text to extract at all; photograph or screenshot the page
+and attach it as an image instead, and the vision model reads it directly. Slide
+decks and spreadsheets are not extracted yet either.
 
 Attachments appear as a chip above the input, with a thumbnail for images. Tap
 **✕** on a chip to remove it. Once sent, the attachment stays visible in the
@@ -113,6 +116,11 @@ capability, not choosing a default.
 Vision is the largest download because a vision model needs both weights and a
 separate projector. Check free space before starting it.
 
+**Keep the screen on while a model downloads.** Android suspends the app when the
+screen sleeps, and an interrupted transfer currently starts over rather than
+resuming. You can move around the app freely — only the screen going off stops
+it.
+
 ## Troubleshooting
 
 **Replies mention a model I didn't expect.** That's the fallback note doing its
@@ -122,12 +130,19 @@ the note.
 **An image reply is wrong or invented.** Check the tags. If the model shown isn't
 the vision model, it never saw the image. Download the vision model.
 
-**A document reply says the contents couldn't be read.** Expected for PDFs, slide
-decks, and spreadsheets — on-device text extraction for those isn't implemented,
-and the app says so rather than inventing contents. Screenshot the page and
-attach it as a photo instead. Text, Markdown, CSV, JSON, YAML, and source files
-should all read correctly.
+**A document reply says the contents couldn't be read.** The reply states which
+reason applies. A scanned PDF has no text layer to extract — photograph the page
+and attach it as an image instead. Slide decks and spreadsheets are not extracted
+yet. Text, Markdown, CSV, JSON, YAML, source files and ordinary PDFs should all
+read correctly.
 
 **Everything is slow.** Expected for larger models on-device, and worst on the
 first reply after a model loads. Smaller models are much faster; the router will
 still use a big model when the question needs one.
+
+**A download restarted from zero.** The screen most likely slept part-way
+through. Keep it awake until the download finishes.
+
+**The vision model won't load on my phone.** It needs roughly 4 GB of RAM for the
+weights, the projector and the context. On a smaller device the reply falls back
+to a text model and says so.
