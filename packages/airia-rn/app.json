@@ -18,6 +18,7 @@
     },
     "android": {
       "package": "com.nikhil.airia",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0D0B07"

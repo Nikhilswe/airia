@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Image,
+  Keyboard,
   Platform,
   StyleSheet,
   Animated,
@@ -135,6 +136,14 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
       }
     }
     init().catch(console.error)
+  }, [])
+
+  // Keep the latest turn in view once the keyboard has finished opening.
+  useEffect(() => {
+    const onShow = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50)
+    })
+    return () => onShow.remove()
   }, [])
 
   useEffect(() => {
@@ -338,25 +347,28 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
   return (
     <View style={[styles.screen, { backgroundColor: theme.bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Sidebar */}
+      {/* The dismiss-on-tap backdrop sits *behind* the panel rather than
+          wrapping it — a Pressable ancestor swallows the pan gesture, which
+          left the scrollable panels unscrollable on Android. */}
       <Modal visible={sidebarOpen} transparent animationType="slide" onRequestClose={() => setSidebarOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setSidebarOpen(false)}>
-          <Pressable style={[styles.sidebarContainer, { backgroundColor: theme.surface }]} onPress={() => {}}>
+        <View style={styles.modalRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSidebarOpen(false)} accessibilityLabel="Close menu" />
+          <View style={[styles.sidebarContainer, { backgroundColor: theme.surface }]}>
             {sidebar}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Settings */}
       <Modal visible={settingsOpen} transparent animationType="slide" onRequestClose={() => setSettingsOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setSettingsOpen(false)}>
-          <Pressable style={{ flex: 1 }} onPress={() => {}}>
-            <SettingsPanel
-              theme={theme} themeName={themeName} onThemeChange={onThemeChange}
-              tier={tier} onClose={() => setSettingsOpen(false)}
-              onTierConfigChanged={config => { setTier(config.tier); setModelName(config.modelName) }}
-            />
-          </Pressable>
-        </Pressable>
+        <View style={styles.modalRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSettingsOpen(false)} accessibilityLabel="Close settings" />
+          <SettingsPanel
+            theme={theme} themeName={themeName} onThemeChange={onThemeChange}
+            tier={tier} onClose={() => setSettingsOpen(false)}
+            onTierConfigChanged={config => { setTier(config.tier); setModelName(config.modelName) }}
+          />
+        </View>
       </Modal>
 
       {/* Header — glassmorphic bar */}
@@ -404,8 +416,10 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
       {modelDownloadState !== 'prompt' && modelDownloadState !== 'downloading' && (
         <KeyboardAvoidingView
           style={styles.flex}
+          // Android lifts the window itself via softwareKeyboardLayoutMode:
+          // "pan" — under edge-to-edge the keyboard is folded into the safe-area
+          // bottom inset, so doing the arithmetic here as well cancels the lift.
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={insets.top + 50}
         >
           <FlatList
             ref={listRef}
@@ -509,7 +523,7 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   flex: { flex: 1 },
-  backdrop: {
+  modalRoot: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.65)',
     flexDirection: 'row',
