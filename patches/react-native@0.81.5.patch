@@ -1,0 +1,12 @@
+diff --git a/ReactCommon/hermes/executor/HermesExecutorFactory.cpp b/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
+index 0b72b725feaa582e8dcd14411f20d9059b63b620..0c29c7b5f89826f1dcb82dc0677bab89ec2a41d4 100644
+--- a/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
++++ b/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
+@@ -7,6 +7,7 @@
+ 
+ #include "HermesExecutorFactory.h"
+ 
++#include <thread> // Xcode 16+: no longer transitively included by libc++
+ #include <cxxreact/MessageQueueThread.h>
+ #include <cxxreact/TraceSection.h>
+ #include <hermes/hermes.h>

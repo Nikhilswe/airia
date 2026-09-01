@@ -164,3 +164,54 @@
 - We bear the one-time training cost per adapter (~$5-20 on RunPod)
 - Need a separate adapter signing key managed securely
 - Community adapter review process needed before v2 opens submissions
+
+---
+
+## ADR-015 -- Mobile inference via on-device model, not Ollama
+**Date:** 2026-06-26
+**Status:** ACCEPTED
+**Decision:** Mobile devices run a lightweight on-device model (Gemma 3 1B) via llama.cpp or MediaPipe's LLM Inference API, not Ollama. Ollama remains desktop/server-only (Local tier hardware, Cloud tier VMs).
+**Reason:** Ollama has no iOS/Android runtime and assumes desktop-class RAM/compute. Phones need a model small enough to run in-browser (PWA-first, see ADR-016) or via a native on-device runtime.
+**Architecture:**
+- `OllamaClient` in `@airia/types` is already an interface (`ping`/`chat`/`listModels`/`loadModel`), implemented today only by `OllamaClient.ts` (HTTP calls to Ollama).
+- Add a second implementation, e.g. `OnDeviceClient`, satisfying the same interface, backed by llama.cpp WASM or MediaPipe running Gemma 3 1B in-browser.
+- `TierRouter` gains device-capability detection: desktop with Ollama reachable -> `OllamaClient`; mobile or no local Ollama -> `OnDeviceClient`. This is orthogonal to the existing local/cloud/free tier split — a "local" tier user can be running either backend depending on device.
+- `ContextManager`, `MemoryService`, and the chat loop are unaffected — they depend only on the `OllamaClient` interface, not the concrete class.
+**Consequences:**
+- Need a device-capability probe (distinct from the existing Ollama health check) to pick the right client.
+- Gemma 3 1B quality is materially lower than 12B — see ADR-017 for how this is surfaced to users.
+- WASM model loading/caching strategy needed for PWA (model weights must be cached client-side, not re-downloaded every session).
+
+---
+
+## ADR-016 -- Mobile delivery is PWA-first, native app post-traction
+**Date:** 2026-06-26
+**Status:** ACCEPTED
+**Decision:** Mobile AIrIA ships as a PWA first (same codebase as desktop, `@airia/fe`). A native app (iOS/Android) is a post-traction investment, not v1/v1.5 scope.
+**Reason:** One frontend codebase for all platforms keeps the relationship-arc UX and theme system consistent without a parallel native build. Native wrapping (better background/notifications/on-device model APIs) only pays off once usage numbers justify it.
+**Consequences:**
+- PWA install prompts, offline support, and home-screen behavior need verification on iOS Safari and Android Chrome specifically (PWA support differs by platform).
+- On-device model runtime must work in-browser (WASM), which constrains the mobile inference choice in ADR-015 — no native llama.cpp bindings until the native app exists.
+
+---
+
+## ADR-017 -- Model-tier transparency in the UI
+**Date:** 2026-06-26
+**Status:** ACCEPTED
+**Decision:** The UI must clearly show users which model they're currently running on (e.g. "Gemma 3 12B — Local" vs "Gemma 3 1B — Mobile"), so the 1B/12B quality gap is an explicit, expected tradeoff rather than a silent surprise.
+**Reason:** CEO confirmed — the 1B vs 12B gap is real and noticeable; hiding it erodes trust in the "buddy" relationship more than disclosing it does.
+**Consequences:**
+- Settings panel (and possibly the chat header) needs a model/tier indicator — extends the existing `tier-pill` UI in `ChatView.tsx`.
+- Copy must stay in "buddy" voice per ADR-010 — avoid technical phrasing like "running on reduced model," prefer something that reads as an honest, low-drama disclosure.
+
+---
+
+## ADR-018 -- Cross-device memory sync is opt-in, default off
+**Date:** 2026-06-26
+**Status:** ACCEPTED
+**Decision:** Personal memory layer sync across a user's own devices (e.g. phone + desktop sharing the same memory) is an explicit, user-facing opt-in toggle, defaulting to OFF. With it off, memory stays local-only per device (the existing behavior). This amends ADR-001's blanket "cross-device sync deferred to v2" — sync becomes an opt-in v1 feature rather than fully deferred, but the default experience is unchanged.
+**Reason:** CEO confirmed: give the choice to the user rather than deciding for them; default to local-only if unspecified, since that's the simpler and more private default and requires no new sync infrastructure to ship v1.
+**Consequences:**
+- The local-only default needs zero new work — already true today via per-device IndexedDB.
+- The opt-in sync path still needs the WebRTC (or equivalent) sync mechanism from ADR-001 — that implementation work is now a scoped v1.5/v2 feature behind a toggle, not fully deferred.
+- Settings UI needs a "Sync memory across devices" toggle, off by default, with plain-language consequences shown before enabling (CEO/UX to define exact copy).

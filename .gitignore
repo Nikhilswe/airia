@@ -1,7 +1,12 @@
 node_modules/
 dist/
+.turbo/
+*.tsbuildinfo
 .env
 .env.local
 *.pyc
 __pycache__/
 .DS_Store
+
+# Copied into assets by llama.rn's Gradle plugin at build time
+packages/airia-rn/android/app/src/main/assets/ggml-hexagon/

@@ -1,0 +1,9 @@
+# AIrIA training server — always needed
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+
+# AIrIA actual training — Linux + CUDA only (RTX 4080 machine)
+# Install these on the training machine, not the dev Mac:
+#   pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+#   pip install trl>=0.8.6 datasets>=2.18.0 torch>=2.2.0

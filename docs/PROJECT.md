@@ -48,13 +48,20 @@ It learns through real interaction, not just inference. The more you use it, the
 - Layer 1: Personal memory layer -- IndexedDB-stored facts, patterns, preferences injected silently into every prompt. Works on any device, zero cost, immediate.
 - Layer 2: Skill adapter marketplace -- we train + sign general-purpose LoRA adapters (e.g. "Python tutor", "creative writing"). Users download (~100MB), Ollama loads on top of base model. Free, no personal data used.
 
+**Mobile (PWA-first, see ADR-015/016/017/018):**
+- Mobile inference runs Gemma 3 1B on-device via llama.cpp/MediaPipe (WASM), not Ollama — Ollama stays desktop/Cloud-VM only
+- Memory layer works the same on mobile (per-device IndexedDB), with an opt-in (default off) cross-device sync toggle
+- UI shows which model/tier a user is currently on, so the 1B/12B quality gap is disclosed, not hidden
+- Native app is post-traction; v1/v1.5 ships PWA only
+
 **Out of scope for v1:**
-- WebRTC cross-device sync
+- Cross-device memory sync enabled by default (opt-in toggle exists per ADR-018, but default stays local-only)
 - Federated/pooled community training
 - WebGPU micro fine-tuning (prototype branch in v2)
 - Multi-user accounts on Local tier
 - Umbra shadow deployment integration (future)
 - Billing/payment integration for Cloud tier (API-key based for now)
+- Native mobile app
 
 ---
 
@@ -438,3 +445,17 @@ CTO review findings: PASS
 - DB cascade delete uses single transaction
 
 NEXT: Phase 1 -- Core chat loop (Days 2-4)
+
+### 2026-06-26 -- Phase 1.5 monorepo restructure + mobile inference decisions
+
+Phase 1.5 complete: pnpm workspaces + Turborepo, split into `@airia/types`, `@airia/db`, `@airia/service`, `@airia/fe`. All builds/typecheck/lint/tests pass clean. 40 tests total (29 service unit + 11 db integration, db integration tests new this session).
+
+Verified the local inference path is real, not just code review: installed Ollama, pulled Gemma 3 4B, ran AIrIA's actual `OllamaClient` against it (ping/listModels/chat all confirmed working).
+
+Mobile inference architecture locked:
+- ADR-015: mobile uses on-device Gemma 3 1B via llama.cpp/MediaPipe (WASM), not Ollama -- `OllamaClient` interface gets a second implementation (`OnDeviceClient`), `TierRouter` adds device-capability detection orthogonal to the local/cloud/free split
+- ADR-016: PWA-first for mobile, native app deferred to post-traction
+- ADR-017: UI must show which model/tier a user is on -- 1B vs 12B gap is disclosed, not hidden
+- ADR-018: cross-device memory sync is opt-in, default off (amends ADR-001's blanket v2 deferral -- sync becomes a v1 toggle, but default behavior is unchanged and needs no new infra)
+
+NEXT: Build `OnDeviceClient`, device-capability detection in TierRouter, model-tier UI indicator. Then continue into Phase 2 (feedback signals, DPO pairs, local QLoRA training loop -- the actual personalization moat).

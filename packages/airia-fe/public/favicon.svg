@@ -1,0 +1,45 @@
+<svg width="512" height="512" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <rect width="100" height="100" rx="22" fill="#0D0B07"/>
+  <defs>
+    <filter id="g" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="sg" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <radialGradient id="h" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F5A623" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#F5A623" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Halo + signal ring -->
+  <circle cx="50" cy="22" r="20" fill="url(#h)"/>
+  <circle cx="50" cy="22" r="32" fill="none" stroke="#F5A623" stroke-width="0.7" opacity="0.15"/>
+  <!-- Connections -->
+  <g opacity="0.3">
+    <line x1="18" y1="88" x2="38" y2="62" stroke="#F5A623" stroke-width="0.7"/>
+    <line x1="82" y1="88" x2="62" y2="62" stroke="#F5A623" stroke-width="0.7"/>
+    <line x1="18" y1="88" x2="50" y2="18" stroke="#F5A623" stroke-width="0.7"/>
+    <line x1="82" y1="88" x2="50" y2="18" stroke="#F5A623" stroke-width="0.7"/>
+    <line x1="38" y1="62" x2="62" y2="62" stroke="#F5A623" stroke-width="0.7"/>
+    <line x1="50" y1="18" x2="32" y2="6"  stroke="#F5A623" stroke-width="0.5" opacity="0.5"/>
+    <line x1="50" y1="18" x2="68" y2="6"  stroke="#F5A623" stroke-width="0.5" opacity="0.5"/>
+  </g>
+  <!-- A letterform -->
+  <path d="M18,88 L50,18 L82,88" stroke="#F5A623" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#g)"/>
+  <line x1="34" y1="64" x2="66" y2="64" stroke="#F5A623" stroke-width="2.5" stroke-linecap="round" filter="url(#g)"/>
+  <!-- Nodes -->
+  <g filter="url(#g)">
+    <circle cx="18"  cy="88" r="3"   fill="#F5A623" opacity="0.85"/>
+    <circle cx="82"  cy="88" r="3"   fill="#F5A623" opacity="0.85"/>
+    <circle cx="50"  cy="18" r="3.5" fill="#F5A623"/>
+    <circle cx="38"  cy="62" r="2.5" fill="#F5A623" opacity="0.75"/>
+    <circle cx="62"  cy="62" r="2.5" fill="#F5A623" opacity="0.75"/>
+    <circle cx="32"  cy="6"  r="1.8" fill="#F5A623" opacity="0.5"/>
+    <circle cx="68"  cy="6"  r="1.8" fill="#F5A623" opacity="0.5"/>
+  </g>
+  <!-- i-dot core -->
+  <circle cx="50" cy="22" r="5.5" fill="#F5A623" filter="url(#sg)"/>
+</svg>
