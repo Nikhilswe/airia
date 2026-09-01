@@ -18,13 +18,22 @@
     },
     "android": {
       "package": "com.nikhil.airia",
+      "permissions": ["android.permission.CAMERA"],
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0D0B07"
       }
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "AIrIA needs access to your photos so you can ask about them. Images are analysed on your device and never uploaded.",
+          "cameraPermission": "AIrIA needs camera access so you can photograph something and ask about it. Photos are analysed on your device and never uploaded."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "3aae67af-d8f3-4aaf-83b0-afdbb75d90e7"

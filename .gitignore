@@ -13,3 +13,9 @@ packages/airia-rn/android/app/src/main/assets/ggml-hexagon/
 
 # Local Expo build cache and dev-client device registrations
 packages/airia-rn/.expo/
+
+# Local module build output
+packages/airia-rn/modules/*/android/build/
+
+# Local module build output
+packages/airia-rn/modules/*/android/build/

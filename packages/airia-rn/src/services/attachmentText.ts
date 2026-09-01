@@ -5,6 +5,7 @@
 
 import * as FileSystem from 'expo-file-system/legacy'
 import type { AttachmentHint } from '@airia/types'
+import { extractPdfText } from '../../modules/pdf-text'
 
 /** Keep a single document from crowding the whole context window. */
 const MAX_CHARS_PER_DOC = 12_000
@@ -40,19 +41,9 @@ function truncate(text: string): { text: string; truncated: boolean } {
   return { text: clean.slice(0, MAX_CHARS_PER_DOC), truncated: true }
 }
 
-/**
- * PDF text extraction is not available on-device yet.
- *
- * The pure-JS route (unpdf/pdf.js) is not viable under Hermes: it ships
- * `import.meta`, which fails the release bundle outright, and its renderer
- * additionally expects DOMMatrix and canvas. Forcing it through Babel would
- * only move the failure from build time to run time.
- *
- * Reaching a PDF therefore needs either a native extractor or rendering pages
- * to images for the vision model. Until then we say so rather than guess.
- */
-const PDF_UNSUPPORTED_REASON =
-  'not readable on-device yet (PDF text extraction is not supported)'
+// PDFs go through a native module — PDFKit on iOS, PdfBox on Android. The
+// pure-JS route (pdf.js) cannot run under Hermes: it ships `import.meta`, which
+// fails the release bundle outright, and its renderer needs DOMMatrix and canvas.
 
 export async function extractAttachment(a: AttachmentHint): Promise<ExtractedAttachment> {
   const filename = a.filename ?? 'attachment'
@@ -66,7 +57,12 @@ export async function extractAttachment(a: AttachmentHint): Promise<ExtractedAtt
     }
 
     if (isPdf(a)) {
-      return { filename, text: null, reason: PDF_UNSUPPORTED_REASON, truncated: false }
+      const result = await extractPdfText(a.uri)
+      if (!result.ok) {
+        return { filename, text: null, reason: result.reason, truncated: false }
+      }
+      const { text, truncated } = truncate(result.text)
+      return { filename, text, truncated }
     }
 
     return { filename, text: null, reason: 'unsupported file type', truncated: false }
