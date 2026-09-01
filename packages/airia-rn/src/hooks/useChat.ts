@@ -266,6 +266,11 @@ export function useChat({ conversationId, tier }: UseChatOptions): UseChatReturn
       // the model reasons about contents, not filenames.
       const promptContent = content + await buildAttachmentContext(attachments)
 
+      // Follow the window the model actually loaded with, which can be lower
+      // than the registry value on a low-RAM device.
+      const activeCtx = getNativeAppBridge().getActiveContextSize()
+      if (activeCtx) contextManager.setMaxTokens(activeCtx)
+
       const ollamaMessages = contextManager.buildMessages(systemPrompt, messages, promptContent)
 
       setIsStreaming(true)

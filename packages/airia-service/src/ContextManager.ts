@@ -36,6 +36,15 @@ export class ContextManager {
     this.config = { ...DEFAULT_CONFIG, ...config }
   }
 
+  /**
+   * Re-points the budget at the window the model was actually loaded with.
+   * A device given a reduced context would otherwise keep budgeting for the
+   * registry value and overflow it.
+   */
+  setMaxTokens(maxTokens: number): void {
+    if (maxTokens > 0) this.config = { ...this.config, maxTokens }
+  }
+
   get budget(): number {
     return this.config.maxTokens - this.config.reserveForResponse
   }
