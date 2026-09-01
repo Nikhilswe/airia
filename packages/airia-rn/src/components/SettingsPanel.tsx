@@ -2,7 +2,7 @@
 // Glassmorphic settings drawer with interactive theme cards,
 // frosted surface, and polished model management.
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useSyncExternalStore } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator, Animated } from 'react-native'
 import type { Tier, MetricsSummary } from '@airia/types'
 import { tierRouter, MIN_PAIRS_THRESHOLD } from '@airia/service'
@@ -11,6 +11,12 @@ import type { ThemeColors, ThemeName } from '@airia/ui/src/ThemeToken'
 import { THEMES } from '@airia/ui/src/ThemeToken'
 import { MODEL_REGISTRY, isModelOnDisk, type ModelEntry } from '../bridge/models'
 import { getNativeAppBridge } from '@airia/service'
+import {
+  subscribe as subscribeDownloads,
+  getSnapshot as getDownloadSnapshot,
+  startDownload,
+  markReady,
+} from '../services/modelDownloads'
 
 const THEME_NAMES = Object.keys(THEMES) as ThemeName[]
 const PERIODS = [7, 30, 90]
@@ -59,9 +65,9 @@ export function SettingsPanel({
   const [feedbackCount, setFeedbackCount] = useState(0)
   const [period, setPeriod] = useState(7)
   const [summary, setSummary] = useState<MetricsSummary | null>(null)
-  const [modelStates, setModelStates] = useState<Record<string, 'unknown' | 'available' | 'downloading' | 'ready'>>({})
-  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({})
-  const [downloadError, setDownloadError] = useState<Record<string, string>>({})
+  // Download state is owned outside the view so it survives this panel being
+  // unmounted when the Modal closes.
+  const downloads = useSyncExternalStore(subscribeDownloads, getDownloadSnapshot)
   const [activeModelId, setActiveModelId] = useState<string | null>(null)
   const [expandedModelId, setExpandedModelId] = useState<string | null>(null)
 
@@ -75,33 +81,22 @@ export function SettingsPanel({
 
   useEffect(() => {
     async function checkModels() {
-      const states: Record<string, 'available' | 'ready'> = {}
+      let firstReady: string | null = null
       for (const m of MODEL_REGISTRY) {
-        states[m.id] = (await isModelOnDisk(m.id)) ? 'ready' : 'available'
+        if (await isModelOnDisk(m.id)) {
+          markReady(m.id)
+          firstReady ??= m.id
+        }
       }
-      setModelStates(states)
-      const ready = MODEL_REGISTRY.find(m => states[m.id] === 'ready')
-      if (ready) setActiveModelId(ready.id)
+      if (firstReady) setActiveModelId(firstReady)
     }
     checkModels().catch(console.error)
   }, [])
 
-  const handleModelDownload = useCallback(async (model: ModelEntry) => {
-    setModelStates(prev => ({ ...prev, [model.id]: 'downloading' }))
-    setDownloadProgress(prev => ({ ...prev, [model.id]: 0 }))
-    setDownloadError(prev => ({ ...prev, [model.id]: '' }))
-    try {
-      await getNativeAppBridge().downloadModel(model.id, (progress) => {
-        setDownloadProgress(prev => ({ ...prev, [model.id]: progress }))
-      })
-      setModelStates(prev => ({ ...prev, [model.id]: 'ready' }))
-    } catch (err) {
-      // Swallowing this left the button reverting to "Download" with no
-      // explanation, which reads as the button simply not working.
-      console.error(`Download failed for ${model.id}:`, err)
-      setDownloadError(prev => ({ ...prev, [model.id]: (err as Error).message }))
-      setModelStates(prev => ({ ...prev, [model.id]: 'available' }))
-    }
+  // Fire and forget: the store keeps running whether or not this panel is
+  // mounted, and reports failure through the same snapshot.
+  const handleModelDownload = useCallback((model: ModelEntry) => {
+    void startDownload(model.id)
   }, [])
 
   const handleModelSwitch = useCallback(async (model: ModelEntry) => {
@@ -268,9 +263,12 @@ export function SettingsPanel({
           Download and switch between on-device models.
         </Text>
         {MODEL_REGISTRY.map(model => {
-          const state = modelStates[model.id] ?? 'unknown'
+          const download = downloads[model.id]
+          const state = download?.phase === 'downloading' ? 'downloading'
+            : download?.phase === 'ready' ? 'ready'
+            : 'available'
           const isActive = model.id === activeModelId
-          const progress = downloadProgress[model.id] ?? 0
+          const progress = download?.progress ?? 0
           const sizeMB = Math.round(model.sizeBytes / 1_000_000)
           return (
             <View key={model.id} style={[styles.modelCard, {
@@ -313,9 +311,9 @@ export function SettingsPanel({
                     {model.minRamGB}GB+
                   </Text>
                 </View>
-                {downloadError[model.id] ? (
+                {download?.error ? (
                   <Text style={[styles.modelError, { color: theme.shock }]}>
-                    Download failed — {downloadError[model.id]}
+                    Download failed — {download.error}
                   </Text>
                 ) : null}
               </View>
