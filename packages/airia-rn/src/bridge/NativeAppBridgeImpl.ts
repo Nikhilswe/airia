@@ -229,8 +229,15 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
 
     // Pass messages directly — llama.rn applies the GGUF's built-in chat
     // template (Gemma, Llama, …) internally, so no manual formatting.
+    // Skipping the callback is not enough to stop anything: llama.cpp keeps
+    // generating to n_predict, so the promise settles minutes later and the UI
+    // stays locked. stopCompletion actually halts the loop.
+    const onAbort = () => { ctx.stopCompletion().catch(() => {}) }
+    options.signal?.addEventListener('abort', onAbort)
+
     let fullResponse = ''
-    const result = await ctx.completion(
+    try {
+      const result = await ctx.completion(
       {
         messages: outbound,
         // Only skip structured parsing for models whose template cannot drive
@@ -242,7 +249,6 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
         ...(mediaPaths?.length ? { media_paths: mediaPaths } : {}),
         n_predict: MAX_RESPONSE_TOKENS,
         temperature: options.temperature ?? 0.7,
-        // Cover turn-end markers across model families in the registry.
         // Turn-end markers across the registry: Gemma, Llama, Phi, and the
         // ChatML pair Qwen uses — without <|im_end|> the Qwen models leak
         // raw template tokens into the reply.
@@ -253,9 +259,11 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
         fullResponse += data.token
         options.onChunk?.(data.token)
       }
-    )
-
-    return result.text ?? fullResponse
+      )
+      return result.text ?? fullResponse
+    } finally {
+      options.signal?.removeEventListener('abort', onAbort)
+    }
   }
 
   // ── Adapter stubs (LoRA — not yet supported in llama.rn stable) ───────────
