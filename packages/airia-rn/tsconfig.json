@@ -6,12 +6,29 @@
     "moduleResolution": "bundler",
     "noEmit": true,
     "paths": {
-      "@airia/types": ["../airia-types/src/index.ts"],
-      "@airia/db": ["./src/db/rnDb.ts"],
-      "@airia/service": ["../airia-service/src/index.ts"],
-      "@airia/ui": ["../airia-ui/src/index.ts"],
-      "@airia/ui/src/*": ["../airia-ui/src/*"]
+      "@airia/types": [
+        "../airia-types/src/index.ts"
+      ],
+      "@airia/db": [
+        "./src/db/rnDb.ts"
+      ],
+      "@airia/service": [
+        "../airia-service/src/index.ts"
+      ],
+      "@airia/ui": [
+        "../airia-ui/src/index.ts"
+      ],
+      "@airia/ui/src/*": [
+        "../airia-ui/src/*"
+      ]
     }
   },
-  "include": ["src", "metro.config.js"]
+  "include": [
+    "src",
+    "modules",
+    "metro.config.js",
+    "../airia-types/src",
+    "../airia-service/src",
+    "../airia-ui/src"
+  ]
 }

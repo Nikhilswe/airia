@@ -13,3 +13,9 @@ onlyBuiltDependencies:
 
 patchedDependencies:
   react-native@0.81.5: patches/react-native@0.81.5.patch
+
+# react-native-svg and react-native-markdown-display drag in @types/react 18,
+# which conflicts with the 19 the app uses and makes their components fail
+# typecheck as "not a valid JSX element type". One version across the tree.
+overrides:
+  '@types/react': ~19.1.17

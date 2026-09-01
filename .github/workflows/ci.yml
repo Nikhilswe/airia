@@ -4,53 +4,70 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint
+  # Lint, typecheck and unit tests share a checkout+install, so running them as
+  # one job avoids paying for three installs. They are independent checks, so
+  # `if: always()` keeps a lint failure from hiding a test failure.
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm' }
-      - run: npm ci
-      - run: npm run lint
 
-  typecheck:
-    name: Type check
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm' }
-      - run: npm ci
-      - run: npm run typecheck
+      - uses: pnpm/action-setup@v4
 
-  test:
-    name: Unit tests
-    needs: typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm' }
-      - run: npm ci
-      - run: npm run test:unit
-
-  build:
-    name: Build
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm' }
-      - run: npm ci
-      - run: npm run build
-      - uses: actions/upload-artifact@v4
         with:
-          name: dist
-          path: dist/
-          retention-days: 7
+          node-version: '22'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        if: always()
+        run: pnpm typecheck
+
+      - name: Unit tests
+        if: always()
+        run: pnpm test:unit
+
+      - name: Web build
+        if: always()
+        run: pnpm build
+
+  # The React Native release bundle is the only check that exercises Metro's
+  # production path. Dev builds resolve lazily, so a dependency that cannot run
+  # under Hermes — `import.meta`, Node built-ins — passes locally and fails only
+  # here. Bundling alone catches that without the cost of a full native build.
+  bundle-mobile:
+    name: Mobile JS bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Bundle for Android (release)
+        working-directory: packages/airia-rn
+        run: |
+          mkdir -p /tmp/bundle-out
+          pnpm exec expo export:embed \
+            --platform android \
+            --dev false \
+            --bundle-output /tmp/bundle-out/index.android.bundle \
+            --assets-dest /tmp/bundle-out
