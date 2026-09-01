@@ -13,6 +13,8 @@ import { getModel, modelPath, mmprojPath, isModelOnDisk, isFileComplete, discard
 
 export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
   private contexts = new Map<string, LlamaContext>()
+  /** Context size a model was actually loaded with, which may be below the registry value. */
+  private contextSizes = new Map<string, number>()
   private activeModelId: string | null = null
 
   // ── Device info ────────────────────────────────────────────────────────────
@@ -156,12 +158,29 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
 
     const entry = getModel(modelId)
     const path = modelPath(modelId)
+
+    // Only one model stays resident. Contexts were previously kept forever, so
+    // routing a turn to vision left the reasoning model loaded alongside a 3B
+    // model and its projector — on a mid-range phone that is an out-of-memory
+    // crash, preceded by the GC thrashing that makes the app feel slow.
+    await this.releaseAllExcept(modelId)
+
     onProgress?.(0.99, 'Initialising model…')
+
+    // The registry's context size assumes a roomy device. The KV cache scales
+    // with it, so on a low-RAM phone the full window is the difference between
+    // running and being killed — halve it rather than refuse to load.
+    const info = await this.getDeviceInfo()
+    const wanted = entry?.nCtx ?? 4096
+    const nCtx = info.totalRam > 0 && info.totalRam < 6 ? Math.min(wanted, 4096) : wanted
+    if (nCtx !== wanted) {
+      console.warn(`Reducing ${modelId} context ${wanted} -> ${nCtx} for ${info.totalRam}GB device`)
+    }
 
     const ctx = await initLlama({
       model: path,
       use_mlock: true,
-      n_ctx: entry?.nCtx ?? 4096,
+      n_ctx: nCtx,
       n_threads: entry?.nThreads ?? 4,
     })
 
@@ -184,11 +203,36 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
     }
 
     this.contexts.set(modelId, ctx)
+    this.contextSizes.set(modelId, nCtx)
     this.activeModelId = modelId
   }
 
   getActiveModelId(): string | null {
     return this.activeModelId
+  }
+
+  /** Frees every loaded context except the one about to be used. */
+  private async releaseAllExcept(keepModelId: string): Promise<void> {
+    for (const [id, ctx] of this.contexts) {
+      if (id === keepModelId) continue
+      try {
+        await ctx.release()
+      } catch (err) {
+        console.warn(`Releasing ${id} failed:`, err)
+      }
+      this.contexts.delete(id)
+      this.contextSizes.delete(id)
+    }
+  }
+
+  /**
+   * Context size the active model was loaded with. The budget must follow this
+   * rather than the registry, or a device that got a reduced window would build
+   * prompts too large for it and silently lose the oldest turns.
+   */
+  getActiveContextSize(): number | null {
+    const id = this.activeModelId
+    return id ? this.contextSizes.get(id) ?? null : null
   }
 
   // ── Inference ──────────────────────────────────────────────────────────────

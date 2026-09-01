@@ -21,6 +21,7 @@ export class ExpoGoStubBridge implements NativeAppBridgeInterface {
     throw new Error(NOT_AVAILABLE)
   }
   getActiveModelId(): string | null { return null }
+  getActiveContextSize(): number | null { return null }
   async chat(_messages: OllamaMessage[], _options?: { temperature?: number; onChunk?: (token: string) => void; signal?: AbortSignal }): Promise<string> {
     throw new Error(NOT_AVAILABLE)
   }
