@@ -70,16 +70,25 @@ the one already resident.
 
 ### Models
 
-| Capability | Model | Size | Min RAM |
-|---|---|---|---|
-| `reason` (default) | Gemma 3 1B (Q4) | 806 MB | 2 GB |
-| `code` | Qwen 2.5 Coder 1.5B (Q4) | 1.1 GB | 3 GB |
-| `vision` | Qwen 2.5 VL 3B (Q4) | 1.9 GB + 845 MB projector | 4 GB |
-| `reason` (alt) | Llama 3.2 1B (Q4) | 770 MB | 2 GB |
+| Capability | Model | Size | Context | Min RAM |
+|---|---|---|---|---|
+| `reason` (default) | Gemma 3 1B (Q4) | 806 MB | 8192 | 2 GB |
+| `code` | Qwen 2.5 Coder 1.5B (Q4) | 1.1 GB | 8192 | 3 GB |
+| `vision` | Qwen 2.5 VL 3B (Q4) | 1.9 GB + 845 MB projector | 8192 | 4 GB |
+| `reason` (alt) | Llama 3.2 1B (Q4) | 770 MB | 8192 | 2 GB |
 
 Models download on demand from Hugging Face into app storage. Vision additionally
 needs its **multimodal projector** (`mmproj`) — the weights alone cannot accept an
 image — so it is fetched alongside the model and loaded via `initMultimodal`.
+
+Only one model stays resident: switching capability releases the previous context
+first, since a phone cannot hold two models and their KV caches at once. On
+devices under 6 GB the context is capped at 4096 rather than 8192, and the prompt
+budget follows the window actually loaded rather than the table above.
+
+Replies are capped at 5120 tokens (~20k characters). Generation stops at the
+model's own end-of-turn marker well before that, so the cap only bounds unusually
+long answers instead of truncating them mid-sentence.
 
 ### Graceful degradation
 
@@ -107,10 +116,18 @@ without a grounded skill rather than falling back to the base model.
 
 ## Attachments
 
-The `⊕` button accepts photos and documents. Images are normalised to a bounded
-JPEG before inference — `stb_image`, which the vision model decodes with, cannot
-read HEIC. Documents route by mime type and extension, and have their text pulled
-into the prompt.
+The `⊕` button offers **Take photo**, **Photo library** and **Document**.
+
+Images — captured or picked — are normalised to a bounded JPEG before inference,
+because `stb_image`, which the vision model decodes with, reads neither HEIC nor
+very large files.
+
+Documents route by mime type and extension and have their text pulled into the
+prompt. Plain text, Markdown, CSV, JSON, YAML and source files are read directly;
+**PDFs go through a native extractor** — PDFKit on iOS, PdfBox on Android —
+because pdf.js cannot run under Hermes. When a document cannot be read the reason
+is stated in the prompt (password protected, a scan with no text layer,
+unsupported), so the model declines rather than inventing contents.
 
 ## Layout
 
@@ -132,13 +149,14 @@ dependencies, so web and mobile share it directly.
   hardware — the iOS Simulator's Metal shim aborts the process on CLIP tensor
   upload, as a native trap JavaScript cannot catch. The device path has not been
   exercised.
-- **PDF text extraction is not implemented.** The pure-JS route (`unpdf`/pdf.js)
-  is not viable under Hermes — it ships `import.meta`, which fails the release
-  bundle outright, and its renderer additionally needs `DOMMatrix` and canvas.
-  PDFs currently report that their contents could not be read, so the model
-  declines rather than guessing. Getting them working needs either a native
-  extractor or rendering pages to images for the vision model; the latter would
-  also cover scanned PDFs, which text extraction never could.
+- **Downloads do not survive the screen sleeping.** Android suspends the JS
+  thread, and a transfer interrupted that way restarts rather than resuming.
+  Multi-gigabyte model downloads want a platform download service
+  (`DownloadManager`, `URLSession` background transfers) rather than the
+  JS downloader.
+- **Nothing enforces a model's RAM floor.** The registry records `minRamGB`, but
+  a device below it is still offered the download. Offering a model that cannot
+  load is worse than not offering it.
 
 ## Docs
 

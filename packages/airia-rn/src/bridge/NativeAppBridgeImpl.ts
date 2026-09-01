@@ -9,10 +9,12 @@ import * as Device from 'expo-device'
 import { Platform } from 'react-native'
 import type { NativeAppBridgeInterface, NativeDeviceInfo } from '@airia/service'
 import type { OllamaMessage } from '@airia/types'
-import { getModel, modelPath, mmprojPath, isModelOnDisk, DEFAULT_MODEL_ID } from './models'
+import { getModel, modelPath, mmprojPath, isModelOnDisk, isFileComplete, discardPartialFile, DEFAULT_MODEL_ID, MAX_RESPONSE_TOKENS } from './models'
 
 export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
   private contexts = new Map<string, LlamaContext>()
+  /** Context size a model was actually loaded with, which may be below the registry value. */
+  private contextSizes = new Map<string, number>()
   private activeModelId: string | null = null
 
   // ── Device info ────────────────────────────────────────────────────────────
@@ -60,14 +62,15 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
 
     const dest = modelPath(modelId)
 
-    // Resume partial downloads if the file already exists
-    const existing = await FileSystem.getInfoAsync(dest)
-    if (existing.exists && (existing as { size?: number }).size &&
-        (existing as { size: number }).size > 100_000) {
+    if (await isFileComplete(dest, entry.sizeBytes)) {
       onProgress(1, 'Model already downloaded')
       await this.initModel(modelId, onProgress)
       return
     }
+
+    // Anything left here is a half-written file from an attempt that was cut
+    // short. Clear it, or the next attempt resumes into a corrupt GGUF.
+    await discardPartialFile(dest)
 
     onProgress(0, 'Starting download…')
 
@@ -109,11 +112,8 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
     onProgress: (progress: number, text: string) => void
   ): Promise<void> {
     const dest = mmprojPath(modelId)
-    const existing = await FileSystem.getInfoAsync(dest)
-    if (existing.exists && (existing as { size?: number }).size &&
-        (existing as { size: number }).size > 100_000) {
-      return
-    }
+    if (await isFileComplete(dest, sizeBytes)) return
+    await discardPartialFile(dest)
 
     const dl = FileSystem.createDownloadResumable(
       url,
@@ -158,12 +158,29 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
 
     const entry = getModel(modelId)
     const path = modelPath(modelId)
+
+    // Only one model stays resident. Contexts were previously kept forever, so
+    // routing a turn to vision left the reasoning model loaded alongside a 3B
+    // model and its projector — on a mid-range phone that is an out-of-memory
+    // crash, preceded by the GC thrashing that makes the app feel slow.
+    await this.releaseAllExcept(modelId)
+
     onProgress?.(0.99, 'Initialising model…')
+
+    // The registry's context size assumes a roomy device. The KV cache scales
+    // with it, so on a low-RAM phone the full window is the difference between
+    // running and being killed — halve it rather than refuse to load.
+    const info = await this.getDeviceInfo()
+    const wanted = entry?.nCtx ?? 4096
+    const nCtx = info.totalRam > 0 && info.totalRam < 6 ? Math.min(wanted, 4096) : wanted
+    if (nCtx !== wanted) {
+      console.warn(`Reducing ${modelId} context ${wanted} -> ${nCtx} for ${info.totalRam}GB device`)
+    }
 
     const ctx = await initLlama({
       model: path,
       use_mlock: true,
-      n_ctx: entry?.nCtx ?? 4096,
+      n_ctx: nCtx,
       n_threads: entry?.nThreads ?? 4,
     })
 
@@ -186,11 +203,36 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
     }
 
     this.contexts.set(modelId, ctx)
+    this.contextSizes.set(modelId, nCtx)
     this.activeModelId = modelId
   }
 
   getActiveModelId(): string | null {
     return this.activeModelId
+  }
+
+  /** Frees every loaded context except the one about to be used. */
+  private async releaseAllExcept(keepModelId: string): Promise<void> {
+    for (const [id, ctx] of this.contexts) {
+      if (id === keepModelId) continue
+      try {
+        await ctx.release()
+      } catch (err) {
+        console.warn(`Releasing ${id} failed:`, err)
+      }
+      this.contexts.delete(id)
+      this.contextSizes.delete(id)
+    }
+  }
+
+  /**
+   * Context size the active model was loaded with. The budget must follow this
+   * rather than the registry, or a device that got a reduced window would build
+   * prompts too large for it and silently lose the oldest turns.
+   */
+  getActiveContextSize(): number | null {
+    const id = this.activeModelId
+    return id ? this.contextSizes.get(id) ?? null : null
   }
 
   // ── Inference ──────────────────────────────────────────────────────────────
@@ -231,16 +273,26 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
 
     // Pass messages directly — llama.rn applies the GGUF's built-in chat
     // template (Gemma, Llama, …) internally, so no manual formatting.
+    // Skipping the callback is not enough to stop anything: llama.cpp keeps
+    // generating to n_predict, so the promise settles minutes later and the UI
+    // stays locked. stopCompletion actually halts the loop.
+    const onAbort = () => { ctx.stopCompletion().catch(() => {}) }
+    options.signal?.addEventListener('abort', onAbort)
+
     let fullResponse = ''
-    const result = await ctx.completion(
+    try {
+      const result = await ctx.completion(
       {
         messages: outbound,
+        // Only skip structured parsing for models whose template cannot drive
+        // it. Blanket-forcing this would silently disable tool calling for
+        // every model once tools land, so the decision lives in the registry.
+        force_pure_content: !getModel(modelId)?.supportsToolCalls,
         // llama.rn opens media by filesystem path, not URL — a file:// prefix
         // makes it report the file as missing.
         ...(mediaPaths?.length ? { media_paths: mediaPaths } : {}),
-        n_predict: 1024,
+        n_predict: MAX_RESPONSE_TOKENS,
         temperature: options.temperature ?? 0.7,
-        // Cover turn-end markers across model families in the registry.
         // Turn-end markers across the registry: Gemma, Llama, Phi, and the
         // ChatML pair Qwen uses — without <|im_end|> the Qwen models leak
         // raw template tokens into the reply.
@@ -251,9 +303,11 @@ export class NativeAppBridgeImpl implements NativeAppBridgeInterface {
         fullResponse += data.token
         options.onChunk?.(data.token)
       }
-    )
-
-    return result.text ?? fullResponse
+      )
+      return result.text ?? fullResponse
+    } finally {
+      options.signal?.removeEventListener('abort', onAbort)
+    }
   }
 
   // ── Adapter stubs (LoRA — not yet supported in llama.rn stable) ───────────

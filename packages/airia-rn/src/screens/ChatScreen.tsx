@@ -2,7 +2,7 @@
 // Premium layered UI: structural message rows, glassmorphic header,
 // shock accent indicators, floating input bar.
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Image,
+  Keyboard,
   Platform,
   StyleSheet,
   Animated,
@@ -41,6 +42,7 @@ import { SyncOverlay } from '../components/SyncOverlay'
 import { TypingIndicator } from '../components/TypingIndicator'
 import { nativeBridge } from '../bridge/NativeAppBridgeImpl'
 import { DEFAULT_MODEL_ID, getModel } from '../bridge/models'
+import { startDownload, getSnapshot as getDownloadSnapshot, subscribe as subscribeDownloads } from '../services/modelDownloads'
 
 function generateConversationId(): string {
   return `conv_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -86,14 +88,13 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
   const [modelName, setModelName] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [modelDownloadState, setModelDownloadState] = useState<'idle' | 'prompt' | 'downloading' | 'ready'>('idle')
-  const [downloadProgress, setDownloadProgress] = useState(0)
-  const [downloadText, setDownloadText] = useState('')
   const [downloadModelId, setDownloadModelId] = useState(DEFAULT_MODEL_ID)
   const [trustLevel, setTrustLevel] = useState<0 | 1 | 2 | 3>(0)
   const [inputText, setInputText] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentHint[]>([])
+  const downloads = useSyncExternalStore(subscribeDownloads, getDownloadSnapshot)
   const listRef = useRef<FlatList>(null)
   const inputRef = useRef<TextInput>(null)
 
@@ -137,6 +138,14 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
     init().catch(console.error)
   }, [])
 
+  // Keep the latest turn in view once the keyboard has finished opening.
+  useEffect(() => {
+    const onShow = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50)
+    })
+    return () => onShow.remove()
+  }, [])
+
   useEffect(() => {
     const count = conversations.length
     if (count >= 10)     setTrustLevel(3)
@@ -160,6 +169,31 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
     await sendMessage(content, hints.length > 0 ? hints : undefined)
   }, [inputText, isStreaming, sendMessage, attachments])
 
+  // Shared by the library and camera paths: the vision model decodes with
+  // stb_image, which has no HEIC support and chokes on very large images, so
+  // every picture is normalised to a bounded JPEG before it can be attached.
+  const attachImageAsset = useCallback(async (asset: ImagePicker.ImagePickerAsset, fallbackName: string) => {
+    let uri = asset.uri
+    try {
+      const jpeg = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
+      )
+      uri = jpeg.uri
+    } catch (err) {
+      console.warn('Image conversion failed, using original:', err)
+    }
+
+    setAttachments(prev => [...prev, {
+      type: 'image' as const,
+      mimeType: 'image/jpeg',
+      filename: asset.fileName ?? fallbackName,
+      uri,
+      sizeBytes: asset.fileSize,
+    }])
+  }, [])
+
   const handlePickImage = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -167,30 +201,30 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
       quality: 0.8,
     })
     if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0]
-      // The vision model decodes with stb_image, which has no HEIC support and
-      // chokes on very large images — normalise to a bounded JPEG up front.
-      let uri = asset.uri
-      try {
-        const jpeg = await ImageManipulator.manipulateAsync(
-          asset.uri,
-          [{ resize: { width: 1024 } }],
-          { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
-        )
-        uri = jpeg.uri
-      } catch (err) {
-        console.warn('Image conversion failed, using original:', err)
-      }
-
-      setAttachments(prev => [...prev, {
-        type: 'image' as const,
-        mimeType: 'image/jpeg',
-        filename: asset.fileName ?? 'image.jpg',
-        uri,
-        sizeBytes: asset.fileSize,
-      }])
+      await attachImageAsset(result.assets[0], 'image.jpg')
     }
-  }, [])
+  }, [attachImageAsset])
+
+  const handleTakePhoto = useCallback(async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
+    if (!permission.granted) {
+      Alert.alert(
+        'Camera access needed',
+        permission.canAskAgain
+          ? 'AIrIA needs the camera to take a photo to ask about.'
+          : 'Camera access is off. Enable it for AIrIA in Settings to take photos.'
+      )
+      return
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    })
+    if (!result.canceled && result.assets.length > 0) {
+      await attachImageAsset(result.assets[0], 'photo.jpg')
+    }
+  }, [attachImageAsset])
 
   const handlePickDocument = useCallback(async () => {
     const result = await DocumentPicker.getDocumentAsync({
@@ -212,11 +246,12 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
   // resulting hints to decide which model handles the turn.
   const handleAttach = useCallback(() => {
     Alert.alert('Add attachment', undefined, [
-      { text: 'Photo', onPress: () => { handlePickImage().catch(console.error) } },
+      { text: 'Take photo', onPress: () => { handleTakePhoto().catch(console.error) } },
+      { text: 'Photo library', onPress: () => { handlePickImage().catch(console.error) } },
       { text: 'Document', onPress: () => { handlePickDocument().catch(console.error) } },
       { text: 'Cancel', style: 'cancel' },
     ])
-  }, [handlePickImage, handlePickDocument])
+  }, [handleTakePhoto, handlePickImage, handlePickDocument])
 
   const handleFeedback = useCallback(
     async (messageId: string, signal: FeedbackSignalType) => {
@@ -229,32 +264,24 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
   )
 
   const startModelDownload = useCallback(() => {
-    setModelDownloadState('downloading')
-    nativeBridge.downloadModel(downloadModelId, (progress, text) => {
-      setDownloadProgress(progress)
-      setDownloadText(text)
-    }).then(() => setModelDownloadState('ready'))
-      .catch(err => {
-        console.error('Model download failed:', err)
-        setModelDownloadState('prompt')
-      })
+    void startDownload(downloadModelId)
   }, [downloadModelId])
 
+  // The first-run gate follows the shared store rather than tracking the
+  // transfer itself, so leaving and returning to this screen cannot orphan it.
+  const primaryDownload = downloads[downloadModelId]
+  useEffect(() => {
+    if (!primaryDownload) return
+    if (primaryDownload.phase === 'downloading') setModelDownloadState('downloading')
+    else if (primaryDownload.phase === 'ready') setModelDownloadState('ready')
+    else if (primaryDownload.phase === 'error') setModelDownloadState('prompt')
+  }, [primaryDownload])
+
   // Fetch a capability model the router wanted but couldn't find on disk.
-  // Once it lands, the next matching turn hot-swaps to it automatically.
+  // Routed through the shared store so it keeps running if this screen changes,
+  // and so it cannot race a download already started from Settings.
   const handleDownloadModel = useCallback((modelId: string) => {
-    setDownloadModelId(modelId)
-    setDownloadProgress(0)
-    setDownloadText('')
-    setModelDownloadState('downloading')
-    nativeBridge.downloadModel(modelId, (progress, text) => {
-      setDownloadProgress(progress)
-      setDownloadText(text)
-    }).then(() => setModelDownloadState('ready'))
-      .catch(err => {
-        console.error(`Model download failed (${modelId}):`, err)
-        setModelDownloadState('ready')
-      })
+    void startDownload(modelId)
   }, [])
 
   const startNewConversation = useCallback(() => {
@@ -333,30 +360,37 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
 
   const modelReady = modelDownloadState === 'ready'
   const statusColor = modelReady ? '#34D399' : isStreaming ? theme.shock : theme.textTertiary
-  const inputDisabled = isStreaming || (tier === 'on-device' && modelDownloadState !== 'ready')
+  // Typing and sending are gated separately. Blocking the field while a reply
+  // streams meant a thought had to wait for the model; only sending needs to
+  // wait, and the send control is already a stop button during a reply.
+  const modelUnavailable = tier === 'on-device' && modelDownloadState !== 'ready'
+  const inputDisabled = modelUnavailable
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Sidebar */}
+      {/* The dismiss-on-tap backdrop sits *behind* the panel rather than
+          wrapping it — a Pressable ancestor swallows the pan gesture, which
+          left the scrollable panels unscrollable on Android. */}
       <Modal visible={sidebarOpen} transparent animationType="slide" onRequestClose={() => setSidebarOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setSidebarOpen(false)}>
-          <Pressable style={[styles.sidebarContainer, { backgroundColor: theme.surface }]} onPress={() => {}}>
+        <View style={styles.modalRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSidebarOpen(false)} accessibilityLabel="Close menu" />
+          <View style={[styles.sidebarContainer, { backgroundColor: theme.surface }]}>
             {sidebar}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Settings */}
       <Modal visible={settingsOpen} transparent animationType="slide" onRequestClose={() => setSettingsOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setSettingsOpen(false)}>
-          <Pressable style={{ flex: 1 }} onPress={() => {}}>
-            <SettingsPanel
-              theme={theme} themeName={themeName} onThemeChange={onThemeChange}
-              tier={tier} onClose={() => setSettingsOpen(false)}
-              onTierConfigChanged={config => { setTier(config.tier); setModelName(config.modelName) }}
-            />
-          </Pressable>
-        </Pressable>
+        <View style={styles.modalRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSettingsOpen(false)} accessibilityLabel="Close settings" />
+          <SettingsPanel
+            theme={theme} themeName={themeName} onThemeChange={onThemeChange}
+            tier={tier} onClose={() => setSettingsOpen(false)}
+            onTierConfigChanged={config => { setTier(config.tier); setModelName(config.modelName) }}
+          />
+        </View>
       </Modal>
 
       {/* Header — glassmorphic bar */}
@@ -396,7 +430,12 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
         />
       )}
       {modelDownloadState === 'downloading' && (
-        <ModelDownloadOverlay progress={downloadProgress} text={downloadText} modelId={downloadModelId} theme={theme} />
+        <ModelDownloadOverlay
+          progress={primaryDownload?.progress ?? 0}
+          text={primaryDownload?.detail ?? ''}
+          modelId={downloadModelId}
+          theme={theme}
+        />
       )}
       {syncing && newModel && <SyncOverlay newModel={newModel} onDismiss={dismissSync} theme={theme} />}
 
@@ -404,8 +443,10 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
       {modelDownloadState !== 'prompt' && modelDownloadState !== 'downloading' && (
         <KeyboardAvoidingView
           style={styles.flex}
+          // Android lifts the window itself via softwareKeyboardLayoutMode:
+          // "pan" — under edge-to-edge the keyboard is folded into the safe-area
+          // bottom inset, so doing the arithmetic here as well cancels the lift.
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={insets.top + 50}
         >
           <FlatList
             ref={listRef}
@@ -475,7 +516,7 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
               style={[styles.input, { color: theme.textPrimary }]}
               value={inputText}
               onChangeText={setInputText}
-              placeholder={inputDisabled && !isStreaming ? 'Download a model first…' : 'Message AIrIA…'}
+              placeholder={modelUnavailable ? 'Download a model first…' : 'Message AIrIA…'}
               placeholderTextColor={theme.textTertiary}
               multiline
               editable={!inputDisabled}
@@ -509,7 +550,7 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   flex: { flex: 1 },
-  backdrop: {
+  modalRoot: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.65)',
     flexDirection: 'row',

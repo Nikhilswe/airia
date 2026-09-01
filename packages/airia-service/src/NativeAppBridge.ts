@@ -43,6 +43,8 @@ export interface NativeAppBridgeInterface {
   initModel(modelId: string, onProgress?: (progress: number, text: string) => void): Promise<void>
   /** Registry id of the model currently loaded, or null if none is. */
   getActiveModelId(): string | null
+  /** Context size the active model was actually loaded with. */
+  getActiveContextSize(): number | null
 
   // ── Adapter sync (model weight parity) ────────────────────────────────────
   // Apply a LoRA adapter produced by LocalTrainer on the desktop.
@@ -74,6 +76,7 @@ class NativeAppBridgeStub implements NativeAppBridgeInterface {
   isModelDownloaded(_id: string): Promise<boolean> { this.err('isModelDownloaded') }
   initModel(_id: string, _p?: (n: number, t: string) => void): Promise<void> { this.err('initModel') }
   getActiveModelId(): string | null { return null }
+  getActiveContextSize(): number | null { return null }
   applyAdapter(_path: string, _base: string): Promise<void> { this.err('applyAdapter') }
   getActiveAdapter(): Promise<string | null> { this.err('getActiveAdapter') }
   removeAdapter(): Promise<void> { this.err('removeAdapter') }
