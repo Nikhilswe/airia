@@ -2,7 +2,7 @@
 // Premium layered UI: structural message rows, glassmorphic header,
 // shock accent indicators, floating input bar.
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import {
   View,
   Text,
@@ -42,6 +42,7 @@ import { SyncOverlay } from '../components/SyncOverlay'
 import { TypingIndicator } from '../components/TypingIndicator'
 import { nativeBridge } from '../bridge/NativeAppBridgeImpl'
 import { DEFAULT_MODEL_ID, getModel } from '../bridge/models'
+import { startDownload, getSnapshot as getDownloadSnapshot, subscribe as subscribeDownloads } from '../services/modelDownloads'
 
 function generateConversationId(): string {
   return `conv_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -87,14 +88,13 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
   const [modelName, setModelName] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [modelDownloadState, setModelDownloadState] = useState<'idle' | 'prompt' | 'downloading' | 'ready'>('idle')
-  const [downloadProgress, setDownloadProgress] = useState(0)
-  const [downloadText, setDownloadText] = useState('')
   const [downloadModelId, setDownloadModelId] = useState(DEFAULT_MODEL_ID)
   const [trustLevel, setTrustLevel] = useState<0 | 1 | 2 | 3>(0)
   const [inputText, setInputText] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
   const [attachments, setAttachments] = useState<AttachmentHint[]>([])
+  const downloads = useSyncExternalStore(subscribeDownloads, getDownloadSnapshot)
   const listRef = useRef<FlatList>(null)
   const inputRef = useRef<TextInput>(null)
 
@@ -264,32 +264,24 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
   )
 
   const startModelDownload = useCallback(() => {
-    setModelDownloadState('downloading')
-    nativeBridge.downloadModel(downloadModelId, (progress, text) => {
-      setDownloadProgress(progress)
-      setDownloadText(text)
-    }).then(() => setModelDownloadState('ready'))
-      .catch(err => {
-        console.error('Model download failed:', err)
-        setModelDownloadState('prompt')
-      })
+    void startDownload(downloadModelId)
   }, [downloadModelId])
 
+  // The first-run gate follows the shared store rather than tracking the
+  // transfer itself, so leaving and returning to this screen cannot orphan it.
+  const primaryDownload = downloads[downloadModelId]
+  useEffect(() => {
+    if (!primaryDownload) return
+    if (primaryDownload.phase === 'downloading') setModelDownloadState('downloading')
+    else if (primaryDownload.phase === 'ready') setModelDownloadState('ready')
+    else if (primaryDownload.phase === 'error') setModelDownloadState('prompt')
+  }, [primaryDownload])
+
   // Fetch a capability model the router wanted but couldn't find on disk.
-  // Once it lands, the next matching turn hot-swaps to it automatically.
+  // Routed through the shared store so it keeps running if this screen changes,
+  // and so it cannot race a download already started from Settings.
   const handleDownloadModel = useCallback((modelId: string) => {
-    setDownloadModelId(modelId)
-    setDownloadProgress(0)
-    setDownloadText('')
-    setModelDownloadState('downloading')
-    nativeBridge.downloadModel(modelId, (progress, text) => {
-      setDownloadProgress(progress)
-      setDownloadText(text)
-    }).then(() => setModelDownloadState('ready'))
-      .catch(err => {
-        console.error(`Model download failed (${modelId}):`, err)
-        setModelDownloadState('ready')
-      })
+    void startDownload(modelId)
   }, [])
 
   const startNewConversation = useCallback(() => {
@@ -368,7 +360,11 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
 
   const modelReady = modelDownloadState === 'ready'
   const statusColor = modelReady ? '#34D399' : isStreaming ? theme.shock : theme.textTertiary
-  const inputDisabled = isStreaming || (tier === 'on-device' && modelDownloadState !== 'ready')
+  // Typing and sending are gated separately. Blocking the field while a reply
+  // streams meant a thought had to wait for the model; only sending needs to
+  // wait, and the send control is already a stop button during a reply.
+  const modelUnavailable = tier === 'on-device' && modelDownloadState !== 'ready'
+  const inputDisabled = modelUnavailable
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -434,7 +430,12 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
         />
       )}
       {modelDownloadState === 'downloading' && (
-        <ModelDownloadOverlay progress={downloadProgress} text={downloadText} modelId={downloadModelId} theme={theme} />
+        <ModelDownloadOverlay
+          progress={primaryDownload?.progress ?? 0}
+          text={primaryDownload?.detail ?? ''}
+          modelId={downloadModelId}
+          theme={theme}
+        />
       )}
       {syncing && newModel && <SyncOverlay newModel={newModel} onDismiss={dismissSync} theme={theme} />}
 
@@ -515,7 +516,7 @@ export function ChatScreen({ theme = THEMES.dawn, themeName, onThemeChange }: Ch
               style={[styles.input, { color: theme.textPrimary }]}
               value={inputText}
               onChangeText={setInputText}
-              placeholder={inputDisabled && !isStreaming ? 'Download a model first…' : 'Message AIrIA…'}
+              placeholder={modelUnavailable ? 'Download a model first…' : 'Message AIrIA…'}
               placeholderTextColor={theme.textTertiary}
               multiline
               editable={!inputDisabled}
